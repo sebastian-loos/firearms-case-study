@@ -1,0 +1,388 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Firearms case Study final code
+
+## Load Packages
+
+```{r}
+library(tidyverse)
+library(here)
+```
+
+## Load Firearms Datasets and State datasets
+
+```{r}
+load(here::here("data", "raw_data", "case_study_2.rda"))
+#This loads all the data objects that we previously saved in our raw_data directory.
+
+# load states data
+data(state)
+state.name
+# add Washington DC to dataset and create tibble 
+state.abb <- c(state.abb, "DC")
+state.region <- as.factor(c(as.character(state.region), "South"))
+state.name <- c(state.name, "District of Columbia")
+state_data <- tibble(Location = state.name,
+                     abb = state.abb,
+                     region = state.region)
+```
+
+## Tidy Census Data
+
+```{r}
+# explore data
+census
+tail(census)
+glimpse(census)
+```
+
+The key for SEX is as follows: 0 = Total , 1 = Male , 2 = Female
+
+The key for ORIGIN is as follows: 0 = Total , 1 = Not Hispanic , 2 = Hispanic
+
+The key for RACE is as follows: , 1 = White Alone , 2 = Black or African American Alone , 3 = American Indian and Alaska Native Alone , 4 = Asian Alone , 5 = Native Hawaiian and Other Pacific Islander Alone , 6 = Two or more races
+
+### Tidy Census Data within ethnicity
+
+```{r}
+# summarize by ethnicity
+census_stats <- census |> 
+  filter(SEX == 0, ORIGIN == 0) |> 
+  group_by(NAME) |> 
+  summarise(white = sum(POPESTIMATE2015[RACE == 1])/sum(POPESTIMATE2015)*100,
+            black = sum(POPESTIMATE2015[RACE == 2])/sum(POPESTIMATE2015)*100)
+
+# add hispanic information
+census_stats$hispanic <- census |> 
+  filter(SEX == 0) |> 
+  group_by(NAME) |> 
+  summarise(x = sum(POPESTIMATE2015[ORIGIN == 2]/sum(POPESTIMATE2015)*100)) |> 
+  pull(x)
+
+# add male information
+census_stats$male <- census |> 
+  filter(ORIGIN == 0) |> 
+  group_by(NAME) |> 
+  summarise(x = sum(POPESTIMATE2015[SEX == 1]/sum(POPESTIMATE2015[SEX == 0])*100)) |> 
+  pull(x)
+
+# # add female information
+# census_stats$female <- census |> 
+#   filter(ORIGIN == 0) |> 
+#   group_by(NAME) |> 
+#   summarise(x = sum(POPESTIMATE2015[SEX == 2]/sum(POPESTIMATE2015[SEX == 0])*100)) |> 
+#   pull(x)
+
+# add total population information
+census_stats$total_pop <- census |> 
+  filter(SEX == 0, ORIGIN == 0) |> 
+  group_by(NAME) |> 
+  summarise(total = sum(POPESTIMATE2015)) |> 
+  pull(total)
+
+#lowercase state name for consistency
+census_stats$NAME <- tolower(census_stats$NAME)
+  
+census_stats
+```
+
+### Tidy Census Data within age
+
+```{r}
+# summarize by ethnicity
+age_stats <- census |> 
+  filter(SEX == 0, ORIGIN == 0) |> 
+  group_by(NAME,AGE) |>
+  summarise(sum_ages = sum(POPESTIMATE2015))
+
+# store in wide format
+age_stats <- age_stats |>  
+  pivot_wider(names_from = "NAME",
+              values_from = "sum_ages")
+
+# experiment with map() instead of map_dfc()
+age_stats |>
+  select(-AGE) |>
+  map(cumsum) |> 
+  map(function(x) x/x[nrow(age_stats)]) |> 
+  glimpse()
+
+age_stats <- age_stats |>
+  select(-AGE) |>
+  map_dfc(cumsum) |> 
+  map_dfc(function(x) x/x[nrow(age_stats)]) |> 
+  mutate(AGE = age_stats$AGE, .before = everything()) 
+
+glimpse(age_stats)
+```
+
+## Tidy Crime Data
+
+```{r}
+# explore data
+crime
+colnames(crime)
+tail(crime, n = 20)
+glimpse(crime)
+```
+
+### Tidy Violent Crime Data
+
+```{r}
+# select columns
+violentcrime <- 
+  crime |> 
+  select(1, 3, 5)
+
+# fill in states infos
+violentcrime <- violentcrime |>
+  fill(State) |> 
+  filter(...3 == "Rate per 100,000 inhabitants") |> 
+  rename(violent_crime = `Violent\ncrime1`) |> 
+  select(-`...3`)
+
+
+# # fill in states infos
+# violentcrime <- violentcrime %>%
+#   fill(State) %>%
+#   filter(.[[2]] == "Rate per 100,000 inhabitants") %>%
+#   rename( violent_crime = `Violent\ncrime1`) %>%
+#   select(-`...3`)
+# # this doesn't work! it doesn't now the dot within the filter!!!
+
+# Check states, see that they some of them finish with a number
+violentcrime$State
+
+# lower case and remove numbers from State column
+violentcrime <- violentcrime %>%
+  mutate(State = tolower(gsub('[0-9]+', '', State)))
+```
+
+## Tidy Brady Data
+
+```{r}
+# explore data
+brady
+colnames(brady)
+tail(brady, n = 20)
+glimpse(brady)
+```
+
+```{r}
+# filter brady score and pivot longer
+brady <- brady |> 
+  rename(Law = "States can receive a maximum of 100 points") |> 
+  filter(Law == "TOTAL STATE POINTS") |> 
+  select(-(1:4)) |> 
+  pivot_longer(everything(),
+               names_to = "state",
+               values_to = "brady_scores") |> 
+  mutate_at("brady_scores", as.numeric)
+
+# add state name
+brady <- brady |>
+  left_join(rename(state_data, state = abb),
+            by = "state") |> 
+  select(Location, brady_scores) |> 
+  rename(state = Location) |> 
+  mutate(state = tolower(state))
+
+```
+
+## Tidy Counted 2015 Data
+
+```{r}
+# explore data
+counted15
+tail(counted15, n = 20)
+glimpse(counted15)
+```
+
+### Change variable state content from abbreviations to names
+
+```{r}
+# replace abbreviation with the state variable
+counted15 <- counted15 |> 
+  mutate(state = tolower(state.name[match(state, state.abb)]))
+
+# explore the code above
+# # returns a vector with the the position of (first) matches of its dirst argument
+# match(counted15$state, state.abb)
+# # [1] "GA" "OR" "HI" "KS" "WA" "CA" "AZ" "CO" "CA" "CA" ... +
+# # [1] "AL" "AK" "AZ" "AR" "CA" "CO" "CT" "DE" "FL" "GA" ...
+# # -->  [1] 10 37 11 16 47  5  3  6  5  5 ...
+# 
+# # returns a vector with the names of the states according to the match vector
+# state.name[match(counted15$state, state.abb)]
+# # [1] "Alabama" "Alaska" "Arizona" "Arkansas" "California" "Colorado" ... +
+# # [1] 10 37 11 16 47  5  3  6  5  5 ...
+# # -->  [1] "Georgia" "Oregon" "Hawaii" "Kansas" "Washington" "California"
+# # [7] "Arizona" "Colorado" "California" "California" ...
+# 
+# # converts the state names into lower case
+# tolower(state.name[match(state, state.abb)])
+# # [1] "georgia" "oregon" "hawaii" "kansas" "washington" "california"
+# 
+# # store in variable "state"
+# counted15 |> 
+#   mutate(state = tolower(state.name[match(state, state.abb)]))
+
+```
+
+### Get population stats
+
+```{r}
+# get overall stas
+counted_stats <- counted15 |> 
+  group_by(state) |> 
+  filter(classification == "Gunshot") |> 
+  tally() |> 
+  rename("gunshot_tally" = "n")
+
+#get summary for subset of population
+gunshot_filtered <- counted15 |>
+  group_by(state) |> 
+  filter(classification == "Gunshot", 
+         gender == "Male",
+         raceethnicity != "White",
+         armed != "No") |> 
+  tally() |> 
+  rename("gunshot_filtered" = "n")
+
+# join data
+counted_stats <- left_join(counted_stats, gunshot_filtered, by = "state") |> 
+  mutate(total_pop = census_stats$total_pop[match(state,census_stats$NAME)],
+         gunshot_rate = (gunshot_tally/total_pop)*1000000/2) |> 
+  select(-total_pop)
+
+```
+
+## Tidy Unemployment Data
+
+```{r}
+# explore data
+unemployment
+tail(unemployment, n = 20)
+glimpse(unemployment)
+```
+
+```{r}
+# rename the columns, lower case states and order accordingly
+unemployment <- unemployment |> 
+  rename("state" = "State",
+         "unemployment_rate" = "2015rate",
+         "unemployment_rank" = "Rank") |> 
+  mutate(state = tolower(state)) |> 
+  arrange(state)
+```
+
+## Tidy Population Density Data (Land and Census)
+
+```{r}
+# explore data
+census
+colnames(census)
+tail(brady, n = 20)
+glimpse(brady)
+
+land
+colnames(land)
+tail(land, n = 20)
+glimpse(land)
+```
+
+### Tidy population density data
+
+We select variable LND110210D of the land-data by looking at the land table and comparing values on other sites (such as the census or Wikipedia) to find the correct column. This column corresponds to land area in square miles. We\'ll convert all state names to lower case for easy merging with our growing data frame in a few steps.
+
+```{r}
+# Get state population 
+totalPop <- census |>
+  filter(ORIGIN == 0, SEX == 0) |> 
+  group_by(NAME) |> 
+  summarise(total = sum(POPESTIMATE2015)) |> 
+  mutate(NAME = tolower(NAME))
+# # Alternative, since we already seperated the data before
+# census_stats |> 
+#   select(NAME, total_pop)
+
+# Select square mile column
+landSqMi <- land |> 
+  select(Areaname, land_area = LND110210D) |> 
+  mutate(Areaname = tolower(Areaname))
+
+# calculate populationb density
+popdensity <- left_join(totalPop, landSqMi, by = c("NAME" = "Areaname")) |> 
+  distinct() |> 
+  mutate(density = total/land_area) |> 
+  select(-c(total, land_area))
+
+```
+
+## Tidy Suicide Data
+
+```{r}
+# explore data
+suicide_all
+tail(suicide_all, n = 20)
+glimpse(suicide_all)
+
+# explore data
+suicide_firearm
+tail(suicide_firearm, n = 20)
+glimpse(suicide_firearm)
+```
+
+```{r}
+# create a tibble from two simmilar datasets
+ownership_df <- as_tibble(list("NAME" = tolower(suicide_all$State),
+               "ownership" = suicide_firearm$Deaths/suicide_all$Deaths*100))
+```
+
+## Join Tidy Data
+
+```{r}
+# Join census and crime data
+firearms <- left_join(census_stats, violentcrime,
+                      by = c("NAME" = "State" ))
+
+# Join brady data
+firearms <- firearms |> left_join(brady,
+                      by = c("NAME" = "state"))
+
+# Join counted data
+firearms <- firearms |> left_join(counted_stats,
+                      by = c("NAME" = "state"))
+
+# Join unemployment data
+firearms <- firearms |> left_join(unemployment,
+                      by = c("NAME" = "state"))
+# convert type for unemployment columns
+firearms <- firearms |> 
+  mutate_at("unemployment_rate", as.numeric) |> 
+  mutate_at("unemployment_rank", as.integer)
+
+# Join population density data
+firearms <- firearms |> left_join(popdensity, by = "NAME")
+
+# Join suicide data
+firearms <- firearms |> left_join(ownership_df, by = "NAME")
+
+```
+
+## Save Tidy Data
+
+```{r}
+firearms
+colnames(firearms)
+glimpse(firearms)
+```
+
+```{r}
+# save tidy data
+save(firearms, file = here::here("data", "tidy_data", "case_study_2_tidy.rda"))
+```
