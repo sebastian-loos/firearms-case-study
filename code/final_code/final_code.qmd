@@ -1,0 +1,214 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Firearms case Study final code
+
+## Load Packages
+
+```{r}
+library(tidyverse)
+library(here)
+```
+
+## Load Firearms Datasets
+
+```{r}
+load(here::here("data", "raw_data", "case_study_2.rda"))
+#This loads all the data objects that we previously saved in our raw_data directory.
+```
+
+## Tidy Census Data
+
+```{r}
+# explore data
+census
+tail(census)
+glimpse(census)
+```
+
+The key for SEX is as follows: 0 = Total , 1 = Male , 2 = Female
+
+The key for ORIGIN is as follows: 0 = Total , 1 = Not Hispanic , 2 = Hispanic
+
+The key for RACE is as follows: , 1 = White Alone , 2 = Black or African American Alone , 3 = American Indian and Alaska Native Alone , 4 = Asian Alone , 5 = Native Hawaiian and Other Pacific Islander Alone , 6 = Two or more races
+
+### Tidy Census Data within ethnicity
+
+```{r}
+# summarize by ethnicity
+census_stats <- census |> 
+  filter(SEX == 0, ORIGIN == 0) |> 
+  group_by(NAME) |> 
+  summarise(white = sum(POPESTIMATE2015[RACE == 1])/sum(POPESTIMATE2015)*100,
+            black = sum(POPESTIMATE2015[RACE == 2])/sum(POPESTIMATE2015)*100)
+
+# add hispanic information
+census_stats$hispanic <- census |> 
+  filter(SEX == 0) |> 
+  group_by(NAME) |> 
+  summarise(x = sum(POPESTIMATE2015[ORIGIN == 2]/sum(POPESTIMATE2015)*100)) |> 
+  pull(x)
+
+# add male information
+census_stats$male <- census |> 
+  filter(ORIGIN == 0) |> 
+  group_by(NAME) |> 
+  summarise(x = sum(POPESTIMATE2015[SEX == 1]/sum(POPESTIMATE2015[SEX == 0])*100)) |> 
+  pull(x)
+
+# add female information
+census_stats$female <- census |> 
+  filter(ORIGIN == 0) |> 
+  group_by(NAME) |> 
+  summarise(x = sum(POPESTIMATE2015[SEX == 2]/sum(POPESTIMATE2015[SEX == 0])*100)) |> 
+  pull(x)
+
+# add total population information
+census_stats$total_pop <- census |> 
+  filter(SEX == 0, ORIGIN == 0) |> 
+  group_by(NAME) |> 
+  summarise(total = sum(POPESTIMATE2015)) |> 
+  pull(total)
+
+#lowercase statename for consistency
+census_stats$NAME <- tolower(census_stats$NAME)
+  
+census_stats
+```
+
+### Tidy Census Data within age
+
+```{r}
+# summarize by ethnicity
+age_stats <- census |> 
+  filter(SEX == 0, ORIGIN == 0) |> 
+  group_by(NAME,AGE) |>
+  summarise(sum_ages = sum(POPESTIMATE2015))
+
+# store in wide format
+age_stats <- age_stats |>  
+  pivot_wider(names_from = "NAME",
+              values_from = "sum_ages")
+
+# experiment with map() instead of map_dfc()
+age_stats |>
+  select(-AGE) |>
+  map(cumsum) |> 
+  map(function(x) x/x[nrow(age_stats)]) |> 
+  glimpse()
+
+age_stats <- age_stats |>
+  select(-AGE) |>
+  map_dfc(cumsum) |> 
+  map_dfc(function(x) x/x[nrow(age_stats)]) |> 
+  mutate(AGE = age_stats$AGE, .before = everything()) 
+
+glimpse(age_stats)
+```
+
+## Tidy Crime Data
+
+```{r}
+# explore data
+crime
+colnames(crime)
+tail(crime, n = 20)
+glimpse(crime)
+```
+
+### Tidy Violent Crime Data
+
+```{r}
+# select columns
+violentcrime <- 
+  crime |> 
+  select(1, 3, 5)
+
+# fill in states infos
+violentcrime <- violentcrime |>
+  fill(State) |> 
+  filter(...3 == "Rate per 100,000 inhabitants") |> 
+  rename(violent_crime = `Violent\ncrime1`) |> 
+  select(-`...3`)
+
+
+# # fill in states infos
+# violentcrime <- violentcrime %>%
+#   fill(State) %>%
+#   filter(.[[2]] == "Rate per 100,000 inhabitants") %>%
+#   rename( violent_crime = `Violent\ncrime1`) %>%
+#   select(-`...3`)
+# # this doesn't work! it doesn't now the dot within the filter!!!
+
+# Check states, see that they some of them finish with a number
+violentcrime$State
+
+# lower case and remove numbers from State column
+violentcrime <- violentcrime %>%
+  mutate(State = tolower(gsub('[0-9]+', '', State)))
+```
+
+## 
+
+```{r}
+```
+
+## 
+
+```{r}
+```
+
+## 
+
+```{r}
+```
+
+## 
+
+```{r}
+```
+
+## 
+
+```{r}
+```
+
+## 
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+Join Tidy Data
+
+```{r}
+# Join census and crime data
+firearms <- left_join(census_stats, violentcrime,
+                      by = c("NAME" = "State" ))
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
