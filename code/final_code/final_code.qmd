@@ -19,6 +19,7 @@ library(here)
 load(here::here("data", "raw_data", "case_study_2.rda"))
 #This loads all the data objects that we previously saved in our raw_data directory.
 
+
 # load states data
 data(state)
 state.name
@@ -297,7 +298,7 @@ glimpse(land)
 
 ### Tidy population density data
 
-We select variable LND110210D of the land-data by looking at the land table and comparing values on other sites (such as the census or Wikipedia) to find the correct column. This column corresponds to land area in square miles. We\'ll convert all state names to lower case for easy merging with our growing data frame in a few steps.
+We select variable LND110210D of the land-data by looking at the land table and comparing values on other sites (such as the census or Wikipedia) to find the correct column. This column corresponds to land area in square miles. We'll convert all state names to lower case for easy merging with our growing data frame in a few steps.
 
 ```{r}
 # Get state population 
@@ -377,6 +378,7 @@ firearms <- firearms |> left_join(ownership_df, by = "NAME")
 ## Save Tidy Data
 
 ```{r}
+# Check the tidy data
 firearms
 colnames(firearms)
 glimpse(firearms)
