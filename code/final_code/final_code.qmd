@@ -11,6 +11,9 @@ editor_options:
 ```{r}
 library(tidyverse)
 library(here)
+library(visdat)
+library(skimr)
+library(ggrepel)
 ```
 
 ## Load Firearms Datasets and State datasets
@@ -387,4 +390,110 @@ glimpse(firearms)
 ```{r}
 # save tidy data
 save(firearms, file = here::here("data", "tidy_data", "case_study_2_tidy.rda"))
+```
+
+## Viusalization of the Firearms data
+
+### Load Tidy Data
+
+```{r}
+load(here::here("data", "tidy_data", "case_study_2_tidy.rda"))
+firearms
+```
+
+This dataset contains state level information about firearm ownership (broken down by ethnicity and gender), the population of each state (total_pop), the number of violent crimes (violent_crime), the "total state points" from the Brady Scorecard (brady_scores), the number of gunshots (gunshot_tally), the number of gunshots from armed, non-white, male individuals (gunshot_filtered), the annualized rate per 1,000,000 residents (gunshot_rate), the unemployment rate and unemployment_rank, population density (density), and firearm ownership as a percent of firearm suicides to all suicides (ownership).
+
+### Exploratory Data Anslysis (EDA)
+
+```{r}
+# visualize missingness
+vis_dat(firearms)
+
+# summarize data
+skim(firearms)s
+```
+
+Explore data a little bit and check out if there's a relationship between the number of violent crimes and the total population, unemployment rate or gun ownership per state.
+
+```{r}
+# violent crimes compared to total population
+ggplot(firearms, 
+       aes(x = total_pop,
+           y = violent_crime)) + 
+  geom_point() +
+  labs(x = "Total Population",
+       y = "Violent Crime") + 
+  theme_classic() + 
+  geom_text_repel(aes(label = NAME))
+
+# violent crimes compared to unemployment rate
+ggplot(firearms, 
+       aes(x = unemployment_rate,
+           y = violent_crime)) + 
+  geom_point() +
+  labs(x = "Unemployment Rate",
+       y = "Violent Crime") + 
+  theme_classic()
+
+# violent crimes
+ggplot(firearms, 
+       aes(x = gunshot_rate,
+           y = ownership)) + 
+  geom_point() +
+  labs(x = "Annualized Rate of Fatal \n Police Shootings per 1,000,000",
+       y = "Gun Ownership \n (firearm suicides:all suicides)") + 
+  theme_classic()
+```
+
+Ultimately, we're interested in firearm legislation and fatal police shootings, so let's focus in on Brady scores here, which measure legislation and gunshot_tally, a measure of the rate of fatal police shootings
+
+```{r}
+# visualize legistlation and shootings
+ggplot(firearms, aes(x = brady_scores, 
+                     y = gunshot_rate)) + 
+  geom_point() +
+  labs(x = "Firearm Legislative Strength Score",
+       y = "Annualized Rate of Fatal \n Police Shootings per 1,000,000") + 
+  theme_classic()
+```
+
+we see that there is a relationship, but it is non-linear.
+
+```{r}
+# label points with state name
+ggplot(firearms, aes(x = brady_scores, 
+                     y = gunshot_rate)) + 
+  geom_point() +
+  labs(x = "Firearm Legislative Strength Score",
+       y = "Annualized Rate of Fatal \n Police Shootings per 1,000,000") + 
+  theme_classic() +
+  geom_text(aes(label = NAME), 
+            nudge_x = 7)
+```
+
+```{r}
+# repel points with state name (ggrepel)
+ggplot(firearms, aes(x = brady_scores, 
+                     y = gunshot_rate)) + 
+  geom_point() +
+  labs(x = "Firearm Legislative Strength Score",
+       y = "Annualized Rate of Fatal \n Police Shootings per 1,000,000") + 
+  theme_classic() +
+  geom_text_repel(aes(label = NAME))
+```
+
+### Save plot
+
+```{r}
+pdf(here::here("figures", "exploratory", "Fatal_police_shootings_and_firearm_legislative_strength.pdf"))
+
+ggplot(firearms, aes(x = brady_scores, 
+                     y = gunshot_rate)) + 
+  geom_point() +
+  labs(x = "Firearm Legislative Strength Score",
+       y = "Annualized Rate of Fatal \n Police Shootings per 1,000,000") + 
+  theme_classic() +
+  geom_text_repel(aes(label = NAME))
+
+dev.off()
 ```
